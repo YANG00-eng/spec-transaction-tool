@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>규격별 거래내역서 만들기</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #eef1f3; --sheet: #ffffff; --ink: #17232d; --muted: #5d6b76; --line: #c9d1d7;
+  --head: #ffe699; --calc: #e4efe8; --calc-ink: #1d5c3b; --danger: #a3262a; --focus: #1b5fa8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14191d; --sheet: #1c2328; --ink: #e8edf0; --muted: #98a6b0; --line: #36424a;
+    --head: #6b5a1f; --calc: #1f3329; --calc-ink: #8fd1ad; --danger: #ff8a8d; --focus: #7db4ee; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #14191d; --sheet: #1c2328; --ink: #e8edf0; --muted: #98a6b0; --line: #36424a;
+  --head: #6b5a1f; --calc: #1f3329; --calc-ink: #8fd1ad; --danger: #ff8a8d; --focus: #7db4ee; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; color: var(--ink); background: var(--paper);
+  font: 16px/1.6 "IBM Plex Sans KR", "Malgun Gothic", "맑은 고딕", sans-serif;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+h1 { font-size: clamp(28px, 5vw, 46px); line-height: 1.15; margin: 0 0 12px; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+.lede { margin: 0 0 36px; max-width: 34em; color: var(--muted); }
+.grid { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 40px; align-items: start; }
+@media (max-width: 880px) { .grid { grid-template-columns: minmax(0, 1fr); gap: 32px; } }
+
+.drop {
+  display: block; width: 100%; text-align: left; font: inherit; color: inherit;
+  background: var(--sheet); border: 2px dashed var(--line); border-radius: 4px;
+  padding: 28px 20px; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.drop:hover, .drop.over { border-color: var(--ink); background: var(--head); }
+.drop:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.drop strong { display: block; font-size: 19px; margin-bottom: 4px; }
+.drop span { color: var(--muted); font-size: 14px; }
+.drop.over span, .drop:hover span { color: var(--ink); }
+#file { display: none; }
+.picked { margin: 12px 0 0; font-size: 15px; min-height: 1.6em; word-break: break-all; }
+
+fieldset { border: 0; padding: 0; margin: 28px 0 0; }
+.opt { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+.opt label { flex: 1; }
+.opt small { display: block; color: var(--muted); font-size: 13px; line-height: 1.4; }
+input[type=number] { width: 72px; font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--sheet); color: var(--ink); text-align: right; }
+input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--calc-ink); }
+
+.go {
+  margin-top: 8px; width: 100%; font: inherit; font-weight: 700; font-size: 18px;
+  padding: 14px 18px; border: 0; border-radius: 4px; cursor: pointer; background: var(--ink); color: var(--paper);
+}
+.go:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+.go:not(:disabled):hover { filter: brightness(1.2); }
+
+.result { margin-top: 20px; padding: 16px; border-left: 4px solid var(--calc-ink); background: var(--sheet); font-size: 15px; }
+.result.error { border-color: var(--danger); color: var(--danger); }
+.result ul { margin: 6px 0 0; padding-left: 18px; }
+.result .again { margin-top: 10px; font: inherit; font-weight: 700; padding: 8px 14px; border: 1px solid var(--ink); background: transparent; color: var(--ink); border-radius: 4px; cursor: pointer; }
+
+.preview h2 { font-size: 17px; margin: 0 0 4px; }
+.preview p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+.scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--sheet); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: center; height: 38px; }
+thead th { background: var(--head); font-weight: 700; }
+td.l { text-align: left; }
+tr.calc td { background: var(--calc); color: var(--calc-ink); }
+tr.calc td.note { text-align: left; font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>규격별 거래내역서 만들기</h1>
+  <p class="lede">엑셀 파일을 올리면 품목마다 규격 소계, 가중평균가격, 최저가격, 최빈가격 4행을 붙여 드립니다. 파일은 이 페이지 안에서만 처리되고 어디에도 전송되지 않습니다.</p>
+
+  <div class="grid">
+    <section aria-label="파일 변환">
+      <input id="file" type="file" accept=".xlsx">
+      <button class="drop" id="drop" type="button">
+        <strong>엑셀 파일 선택</strong>
+        <span>여기에 끌어다 놓거나 눌러서 고르세요. (.xlsx)</span>
+      </button>
+      <p class="picked" id="picked" aria-live="polite"></p>
+
+      <fieldset>
+        <div class="opt">
+          <label for="rows">품목마다 거래 입력 행
+            <small>거래가 여러 건이면 늘리세요. 소계는 이 행들을 모두 합산합니다.</small>
+          </label>
+          <input id="rows" type="number" min="1" max="30" value="1" inputmode="numeric">
+        </div>
+        <div class="opt">
+          <label for="formulas">계산식 넣기
+            <small>꺼 두면 4행의 이름만 넣고 칸은 비워 둡니다. 켜면 합계와 평균 등을 자동 계산합니다.</small>
+          </label>
+          <input id="formulas" type="checkbox">
+        </div>
+      </fieldset>
+
+      <button class="go" id="go" type="button" disabled>변환하기</button>
+      <div class="result" id="result" hidden role="status"></div>
+    </section>
+
+    <section class="preview" aria-label="변환 결과 미리보기">
+      <h2>이렇게 바뀝니다</h2>
+      <p>초록색 행이 새로 붙는 4행입니다. 나머지 칸은 그대로 비어 있습니다.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>No.</th><th>물품식별번호</th><th>모델명 또는 규격</th><th>거래일자</th><th>수량</th><th>단가</th><th>금액</th></tr></thead>
+          <tbody id="pv"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const drop = $('drop'), fileInput = $('file'), go = $('go'), result = $('result'), rowsInput = $('rows');
+let chosen = null, lastBuf = null, lastName = '';
+
+const LABELS = ['규격 소계', '가중평균가격', '최저가격', '최빈가격'];
+const HEADERS = ['No.', '물품식별번호', '세부품명', '모델명 또는 규격', '단위', '거래일자', '수량', '단가', '금액', '거래처'];
+const WIDTHS = [7.6, 17.6, 23.8, 70, 7.6, 17.6, 9, 14, 16, 16];
+const FONT = { name: '맑은 고딕', size: 15 };
+const HAIR = { style: 'hair' };
+const BORDER = { top: HAIR, bottom: HAIR, left: HAIR, right: HAIR };
+const WHITE = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
+const HEAD_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
+const NUM = '#,##0_ ';
+
+function cellText(v) {
+  if (v == null) return '';
+  if (typeof v === 'object') {
+    if (v.richText) return v.richText.map(t => t.text).join('');
+    if (v.result != null) return String(v.result);
+    if (v.text != null) return String(v.text);
+  }
+  return String(v);
+}
+function cellValue(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'object' && !(v instanceof Date)) return v.result != null ? v.result : cellText(v);
+  return v;
+}
+function readItems(ws) {
+  let headerRow = 0;
+  for (let r = 1; r <= Math.min(ws.rowCount, 20); r++) {
+    if (cellText(ws.getCell(r, 1).value).trim() === 'No.') { headerRow = r; break; }
+  }
+  if (!headerRow) return null;
+  const items = []; let ignored = 0;
+  for (let r = headerRow + 1; r <= ws.rowCount; r++) {
+    const a = cellValue(ws.getCell(r, 1).value), b = cellValue(ws.getCell(r, 2).value);
+    const f = cellText(ws.getCell(r, 6).value).trim();
+    if (a != null && b != null) {
+      const row = [];
+      for (let c = 1; c <= 10; c++) row.push(cellValue(ws.getCell(r, c).value));
+      items.push(row);
+    } else if (!LABELS.includes(f) && f !== '') {
+      ignored++;
+    } else if (a == null && b == null && f === '') {
+      let any = false;
+      for (let c = 3; c <= 10; c++) if (cellValue(ws.getCell(r, c).value) != null) any = true;
+      if (any) ignored++;
+    }
+  }
+  return { items, ignored };
+}
+function styleRow(ws, r, kind) {
+  ws.getRow(r).height = 30;
+  for (let c = 1; c <= 10; c++) {
+    const cell = ws.getCell(r, c);
+    cell.font = { ...FONT, bold: kind === 'head' };
+    cell.border = BORDER;
+    cell.alignment = { horizontal: c >= 8 ? 'right' : 'center', vertical: 'middle', wrapText: kind === 'head' || c === 4 };
+    if (kind === 'head') { cell.fill = HEAD_FILL; cell.alignment.horizontal = 'center'; }
+    else if (c >= 7) cell.numFmt = NUM;
+    if (kind !== 'head' && c === 7) cell.alignment.horizontal = 'center';
+  }
+}
+function buildSheet(wb, name, items, opts) {
+  const ws = wb.addWorksheet(name.slice(0, 31), {
+    views: [{ state: 'frozen', ySplit: 3, showGridLines: false }],
+    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '3:3' },
+  });
+  WIDTHS.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  ws.mergeCells('A1:J1'); ws.mergeCells('A2:J2');
+  ws.getRow(1).height = 60; ws.getRow(2).height = 23.1;
+  for (let c = 1; c <= 10; c++) { ws.getCell(1, c).fill = WHITE; ws.getCell(2, c).fill = WHITE; }
+  ws.getCell('A1').value = '규격별 거래내역서';
+  ws.getCell('A1').font = { ...FONT, size: 25, bold: true };
+  ws.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.getCell('A2').value = '(금액: 원)';
+  ws.getCell('A2').font = { ...FONT, bold: true };
+  ws.getCell('A2').alignment = { horizontal: 'right', vertical: 'middle' };
+  styleRow(ws, 3, 'head');
+  HEADERS.forEach((h, i) => { ws.getCell(3, i + 1).value = h; });
+
+  const n = opts.rows; let r = 4;
+  for (const it of items) {
+    const first = r, last = r + n - 1, sub = last + 1, avg = sub + 1, low = sub + 2, mode = sub + 3;
+    for (let k = 0; k < n + 4; k++) styleRow(ws, first + k, 'body');
+    for (let c = 1; c <= 10; c++) ws.getCell(first, c).value = it[c - 1];
+    ws.getCell(first, 2).alignment = { horizontal: 'center', vertical: 'middle' };
+    LABELS.forEach((t, k) => { ws.getCell(sub + k, 6).value = t; });
+    if (opts.formulas) {
+      for (let k = first; k <= last; k++)
+        ws.getCell(k, 9).value = { formula: `IF(AND(ISNUMBER(G${k}),ISNUMBER(H${k})),G${k}*H${k},"")` };
+      const H = `H${first}:H${last}`;
+      ws.getCell(sub, 7).value = { formula: `SUM(G${first}:G${last})` };
+      ws.getCell(sub, 9).value = { formula: `SUM(I${first}:I${last})` };
+      ws.getCell(avg, 8).value = { formula: `IF(G${sub}=0,0,I${sub}/G${sub})` };
+      ws.getCell(low, 8).value = { formula: `IF(COUNT(${H})=0,0,MIN(${H}))` };
+      ws.getCell(mode, 8).value = { formula: `IF(COUNT(${H})=0,0,IF(COUNT(${H})=1,MIN(${H}),IFERROR(MODE(${H}),"해당 없음")))` };
+    }
+    r += n + 4;
+  }
+}
+async function convert(buf, opts) {
+  const src = new ExcelJS.Workbook();
+  await src.xlsx.load(buf);
+  const out = new ExcelJS.Workbook();
+  const summary = { sheets: [], skipped: [] };
+  for (const ws of src.worksheets) {
+    const read = readItems(ws);
+    if (!read || read.items.length === 0) { summary.skipped.push(ws.name); continue; }
+    buildSheet(out, ws.name, read.items, opts);
+    summary.sheets.push({ name: ws.name, items: read.items.length, ignored: read.ignored, rows: read.items.length * (opts.rows + 4) });
+  }
+  if (summary.sheets.length === 0) throw new Error('"No." 머리글이 있는 시트를 찾지 못했습니다. 규격별 거래내역서 양식의 파일인지 확인해 주세요.');
+  out.calcProperties = { fullCalcOnLoad: true };
+  return { data: await out.xlsx.writeBuffer(), summary };
+}
+
+function renderPreview() {
+  const n = Math.min(30, Math.max(1, parseInt(rowsInput.value, 10) || 1));
+  const shown = Math.min(n, 4), withCalc = $('formulas').checked;
+  let h = '<tr><td>1</td><td>24066344</td><td class="l">작업용의자, 탑체어, TOP-001, 530×500×734mm</td><td></td><td></td><td></td><td></td></tr>';
+  for (let i = 1; i < shown; i++) h += '<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+  if (n > shown) h += `<tr><td colspan="7" class="l">… 거래 입력 행 ${n}개 (${n - shown}개 생략)</td></tr>`;
+  const calc = [['규격 소계', '수량 합 / 금액 합'], ['가중평균가격', '금액 합 ÷ 수량 합'], ['최저가격', '가장 낮은 단가'], ['최빈가격', '가장 많이 나온 단가']];
+  for (const [label, note] of calc)
+    h += `<tr class="calc"><td></td><td></td><td class="note">${withCalc ? note : ''}</td><td>${label}</td><td></td><td></td><td></td></tr>`;
+  $('pv').innerHTML = h;
+}
+rowsInput.addEventListener('input', renderPreview);
+$('formulas').addEventListener('change', renderPreview);
+renderPreview();
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function show(html, isError) { result.className = 'result' + (isError ? ' error' : ''); result.innerHTML = html; result.hidden = false; }
+
+function setFile(f) {
+  result.hidden = true; lastBuf = null;
+  if (!f) return;
+  if (!/\.xlsx$/i.test(f.name)) {
+    chosen = null; go.disabled = true; $('picked').textContent = '';
+    show('엑셀 파일(.xlsx)만 올릴 수 있습니다. .xls 파일은 엑셀에서 .xlsx로 다시 저장해 주세요.', true);
+    return;
+  }
+  chosen = f; go.disabled = false; $('picked').textContent = `선택한 파일: ${f.name}`;
+}
+drop.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => setFile(e.dataTransfer.files[0]));
+
+function save() {
+  const blob = new Blob([lastBuf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = lastName;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+go.addEventListener('click', async () => {
+  if (!chosen) return;
+  go.disabled = true; go.textContent = '변환하는 중…';
+  try {
+    if (typeof ExcelJS === 'undefined') throw new Error('엑셀 처리 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 페이지를 새로고침해 주세요.');
+    const rows = Math.min(30, Math.max(1, parseInt(rowsInput.value, 10) || 1));
+    const { data, summary } = await convert(await chosen.arrayBuffer(), { rows, formulas: $('formulas').checked });
+    lastBuf = data; lastName = chosen.name.replace(/\.xlsx$/i, '') + '_변환.xlsx';
+    let html = `<strong>변환했습니다.</strong><ul>`;
+    for (const sh of summary.sheets) html += `<li>${esc(sh.name)}: 품목 ${sh.items}개, ${sh.rows}행${sh.ignored ? ` (옮기지 못한 행 ${sh.ignored}개)` : ''}</li>`;
+    if (summary.skipped.length) html += `<li>건너뛴 시트: ${summary.skipped.map(esc).join(', ')} ("No." 머리글 없음)</li>`;
+    html += `</ul><button class="again" id="again" type="button">${esc(lastName)} 저장</button>`;
+    show(html);
+    $('again').addEventListener('click', save);
+  } catch (e) {
+    show(esc(e.message || '변환하지 못했습니다. 파일이 손상되지 않았는지 확인해 주세요.'), true);
+  } finally {
+    go.disabled = false; go.textContent = '변환하기';
+  }
+});
+</script>
+</body>
+</html>
